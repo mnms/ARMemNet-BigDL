@@ -8,7 +8,6 @@ from zoo.pipeline.api.net import TFNet
 from zoo import init_nncontext, Sample
 import tensorflow as tf
 import numpy as np
-from optparse import OptionParser
 from data_utils import load_agg_selected_data_mem
 from ARMem.config import Config
 from ARMem.model import Model
@@ -69,11 +68,4 @@ if __name__ == "__main__":
 
     outputs.saveAsTextFile(os.path.join(result_dir, "result.txt"))
 
-    # collect the RDD to trigger execution
-    result_zoo = np.array(outputs.collect())
-
-    # compare tensorflow result with zoo result
-    result_tensorflow = np.load(os.path.join(find_latest_dir(os.path.join("/home/yang/sources/ARMemNet-BigDL/ARMem/", "results/")), "pred.npy"))
-
-    print("Is the two results equal? ", np.allclose(result_tensorflow, np.array(result_zoo), 0, 1e-6))
 
