@@ -20,8 +20,7 @@ BATCH_PER_THREAD=32
 
 if __name__ == "__main__":
     config = Config()
-    config.data_path = "/home/yang/sources/zoo/aggregated_data_5min_scaled.csv"
-    config.model_dir = "/home/yang/sources/zoo/model/model_save"
+
     config.latest_model=False
 
     model = Model(config)
