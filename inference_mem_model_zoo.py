@@ -11,6 +11,7 @@ import numpy as np
 from data_utils import load_agg_selected_data_mem
 from ARMem.config import Config
 from ARMem.model import Model
+from preprocess_zoo import *
 
 # to reproduce the results in test_mem_model.py
 # please set PARALLELISM to 1 and BATCH_PER_THREAD to 1022
@@ -19,6 +20,32 @@ BATCH_PER_THREAD=32
 
 
 if __name__ == "__main__":
+    # preprocess config
+    config_preprocess = PreprocessConfig()
+
+    # resampled csv, we'll change this later
+    resampled_csv_filename = "/user/nvkvs/data-sample/aggregated_resampled.csv"
+
+    # load resmapled data with given CELL_IDs
+    df = load_resampled_data(resampled_csv_filename)
+
+    # normalize
+    df_normed, df_minmax = norm_df(df, feat_minmax=config_preprocess.FEAT_MINMAX,
+                                   cols_to_exclude=config_preprocess.COLS_TO_EXCLUDE)
+
+    # filter valid cells after normalize (because of scaling factor)
+    df_normed = filter_valid_cells(df_normed, config_preprocess.VALID_CELL_IDS)
+
+    # assemble features in one column named 'features'
+    df_assembled = assemble_features(df_normed, cols_to_exclude=config_preprocess.COLS_TO_EXCLUDE)
+
+    # prepare test data
+    # train_x, train_y, train_m, valid_x, valid_y, valid_m, test_x, test_y, test_m = generate_dataset(df_assembled,
+    #                                                                                                 config_preprocess)
+
+    _, _, _, _, _, _, test_x, test_y, test_m = generate_dataset(df_assembled, config_preprocess)
+
+
     config = Config()
 
     config.latest_model=False
@@ -28,18 +55,8 @@ if __name__ == "__main__":
     # init or get SparkContext
     sc = init_nncontext()
 
-    # create test data
-    _, _, test_x, _, _, test_y, _, _, test_m, test_dt = \
-        load_agg_selected_data_mem(data_path=config.data_path,
-                                   x_len=config.x_len,
-                                   y_len=config.y_len,
-                                   foresight=config.foresight,
-                                   cell_ids=config.test_cell_ids,
-                                   dev_ratio=config.dev_ratio,
-                                   test_len=config.test_len,
-                                   seed=config.seed)
-
-    model_dir = config.model_dir
+    # model_dir = config.model_dir
+    model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
 
     #  export a TensorFlow model to frozen inference graph.
     with tf.Session() as sess:
