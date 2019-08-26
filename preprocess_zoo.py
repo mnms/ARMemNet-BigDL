@@ -155,8 +155,9 @@ def generate_dataset_x(df_assembled, CONFIG_PREPROCESS):
                                     'dt')  # DROP 9 Rows which has null value with 20 Cells (9 * 20 = 180 Rows)
 
     # drop data for INPUT_Y
-    input_x = input_x.withColumn('seq', row_number().over(x_window_spec)).filter('seq <= ' + str(
-        input_x.groupBy("CELL_NUM").count().collect()[0]['count'] - CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
+    items_per_cell = input_x.groupBy("CELL_NUM").count().toPandas()['count'][0].item()
+    input_x = input_x.withColumn('seq', row_number().over(x_window_spec)).filter(
+        'seq <= ' + str(items_per_cell - CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
 
     # [dt, CELL_NUM, 8 features x [INPUT_X_SIZE] steps]
     input_x = VectorAssembler().setInputCols(x_feat_cols).setOutputCol('features').transform(input_x).select(
@@ -206,9 +207,9 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
         m_days_cols.append('day{}_features'.format(i))
 
     input_m = input_m.dropna().sort('CELL_NUM', 'dt')
+    items_per_cell = input_m.groupBy("CELL_NUM").count().toPandas()['count'][0].item()
     input_m = input_m.withColumn('seq', row_number().over(m_window_spec)).filter(
-        'seq <= ' + str(input_m.groupBy("CELL_NUM").count().collect()[0]['count'] - int(skip_size))).drop(
-        'seq')  # drop data for X & Y
+        'seq <= ' + str(items_per_cell - int(skip_size))).drop('seq')  # drop data for X & Y
     input_m = VectorAssembler().setInputCols(m_days_cols).setOutputCol('features').transform(input_m).select(
         ['dt', 'CELL_NUM', 'features'])  # assemble DAYS_TO_MEMORY days columns into one ('features')
 
