@@ -9,7 +9,9 @@ from pyspark.sql.types import StructType, StructField, TimestampType, DateType, 
 from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, row_number
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
+
 import numpy as np
+import pandas as pd
 
 # Config for Preprocessing
 class PreprocessConfig():
@@ -65,6 +67,8 @@ def norm_df(df_to_norm, feat_minmax=[-1.0, 1.0], cols_to_exclude=['summary']):
     cols_minmax = cols_minmax.select(
         ["summary"] + [cols_minmax[c].cast("float") for c in cols_minmax.columns[1:]])  # Cast type from String to Float
 
+    cols_minmax_pd = cols_minmax.toPandas()
+
     # Select Feat Columns
     cols_to_norm = [c for c in cols_minmax.columns if c not in cols_to_exclude + ['summary']]
 
@@ -72,8 +76,8 @@ def norm_df(df_to_norm, feat_minmax=[-1.0, 1.0], cols_to_exclude=['summary']):
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_norm:
-        real_min = cols_minmax.select(col).collect()[0][col]
-        real_max = cols_minmax.select(col).collect()[1][col]
+        real_min = cols_minmax_pd[col][0].item()
+        real_max = cols_minmax_pd[col][1].item()
 
         df_to_norm = df_to_norm.withColumn(col, (df_to_norm[col] - real_min) * (feat_max - feat_min) / (
                     real_max - real_min) + feat_min)
@@ -89,6 +93,8 @@ def unnorm_df(df_to_unnorm, real_minmax, feat_minmax=[-1.0, 1.0], cols_to_exclud
     cols_to_unnorm = [c for c in real_minmax.columns if c not in cols_to_exclude + ['summary']]
     cols_to_confirm = [c for c in df_to_unnorm.columns if c not in cols_to_exclude + ['summary']]
 
+    real_minmax_pd = real_minmax.toPandas()
+
     # Check columns exactly match
     if set(cols_to_unnorm) - set(cols_to_confirm) or set(cols_to_confirm) - set(cols_to_unnorm):
         # TODO: Need Exception
@@ -98,8 +104,8 @@ def unnorm_df(df_to_unnorm, real_minmax, feat_minmax=[-1.0, 1.0], cols_to_exclud
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_unnorm:
-        real_min = real_minmax.select(col).collect()[0][col]
-        real_max = real_minmax.select(col).collect()[1][col]
+        real_min = real_minmax_pd[col][0].item()
+        real_max = real_minmax_pd[col][1].item()
 
         df_to_unnorm = df_to_unnorm.withColumn(col, (df_to_unnorm[col] - feat_min) / (feat_max - feat_min) * (
                     real_max - real_min) + real_min)
