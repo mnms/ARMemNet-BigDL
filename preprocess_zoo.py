@@ -156,7 +156,7 @@ def generate_dataset_x(df_assembled, CONFIG_PREPROCESS):
                                     'dt')  # DROP 9 Rows which has null value with 20 Cells (9 * 20 = 180 Rows)
 
     # drop data for INPUT_Y
-    input_x.withColumn('seq', row_number().over(x_desc_window_spec)).filter(
+    input_x = input_x.withColumn('seq', row_number().over(x_desc_window_spec)).filter(
         'seq > ' + str(CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
 
     # [dt, CELL_NUM, 8 features x [INPUT_X_SIZE] steps]
@@ -209,7 +209,7 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
 
     input_m = input_m.dropna().sort('CELL_NUM', 'dt')
     input_m = input_m.withColumn('seq', row_number().over(m_desc_window_spec)).filter(
-        'seq > ' + str(skip_size)).drop('seq')
+        'seq > ' + str(skip_size)).drop('seq').sort('CELL_NUM', 'dt')
     input_m = VectorAssembler().setInputCols(m_days_cols).setOutputCol('features').transform(input_m).select(
         ['dt', 'CELL_NUM', 'features'])  # assemble DAYS_TO_MEMORY days columns into one ('features')
 
