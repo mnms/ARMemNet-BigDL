@@ -6,10 +6,12 @@ from pyspark.context import SparkContext
 from pyspark.sql import SparkSession, SQLContext
 
 from pyspark.sql.types import StructType, StructField, TimestampType, DateType, FloatType, IntegerType
-from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, row_number
+from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, row_number, desc
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
+
 import numpy as np
+import pandas as pd
 
 # Config for Preprocessing
 class PreprocessConfig():
@@ -65,6 +67,8 @@ def norm_df(df_to_norm, feat_minmax=[-1.0, 1.0], cols_to_exclude=['summary']):
     cols_minmax = cols_minmax.select(
         ["summary"] + [cols_minmax[c].cast("float") for c in cols_minmax.columns[1:]])  # Cast type from String to Float
 
+    cols_minmax_pd = cols_minmax.toPandas()
+
     # Select Feat Columns
     cols_to_norm = [c for c in cols_minmax.columns if c not in cols_to_exclude + ['summary']]
 
@@ -72,8 +76,8 @@ def norm_df(df_to_norm, feat_minmax=[-1.0, 1.0], cols_to_exclude=['summary']):
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_norm:
-        real_min = cols_minmax.select(col).collect()[0][col]
-        real_max = cols_minmax.select(col).collect()[1][col]
+        real_min = cols_minmax_pd[col][0].item()
+        real_max = cols_minmax_pd[col][1].item()
 
         df_to_norm = df_to_norm.withColumn(col, (df_to_norm[col] - real_min) * (feat_max - feat_min) / (
                     real_max - real_min) + feat_min)
@@ -89,6 +93,8 @@ def unnorm_df(df_to_unnorm, real_minmax, feat_minmax=[-1.0, 1.0], cols_to_exclud
     cols_to_unnorm = [c for c in real_minmax.columns if c not in cols_to_exclude + ['summary']]
     cols_to_confirm = [c for c in df_to_unnorm.columns if c not in cols_to_exclude + ['summary']]
 
+    real_minmax_pd = real_minmax.toPandas()
+
     # Check columns exactly match
     if set(cols_to_unnorm) - set(cols_to_confirm) or set(cols_to_confirm) - set(cols_to_unnorm):
         # TODO: Need Exception
@@ -98,8 +104,8 @@ def unnorm_df(df_to_unnorm, real_minmax, feat_minmax=[-1.0, 1.0], cols_to_exclud
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_unnorm:
-        real_min = real_minmax.select(col).collect()[0][col]
-        real_max = real_minmax.select(col).collect()[1][col]
+        real_min = real_minmax_pd[col][0].item()
+        real_max = real_minmax_pd[col][1].item()
 
         df_to_unnorm = df_to_unnorm.withColumn(col, (df_to_unnorm[col] - feat_min) / (feat_max - feat_min) * (
                     real_max - real_min) + real_min)
@@ -128,6 +134,7 @@ def assemble_features(df_to_assemble, cols_to_exclude=['dt', 'CELL_NUM']):
 # Generate Dataset for X
 def generate_dataset_x(df_assembled, CONFIG_PREPROCESS):
     x_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt')
+    x_desc_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', desc('dt'))
     x_feat_cols = ['features0']
     skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY
 
@@ -149,8 +156,8 @@ def generate_dataset_x(df_assembled, CONFIG_PREPROCESS):
                                     'dt')  # DROP 9 Rows which has null value with 20 Cells (9 * 20 = 180 Rows)
 
     # drop data for INPUT_Y
-    input_x = input_x.withColumn('seq', row_number().over(x_window_spec)).filter('seq <= ' + str(
-        input_x.groupBy("CELL_NUM").count().collect()[0]['count'] - CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
+    input_x = input_x.withColumn('seq', row_number().over(x_desc_window_spec)).filter(
+        'seq > ' + str(CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
 
     # [dt, CELL_NUM, 8 features x [INPUT_X_SIZE] steps]
     input_x = VectorAssembler().setInputCols(x_feat_cols).setOutputCol('features').transform(input_x).select(
@@ -176,6 +183,7 @@ def generate_dataset_y(df_assembled, CONFIG_PREPROCESS):
 # Generate Dataset for M
 def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
     m_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt')
+    m_desc_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', desc('dt'))
     m_feat_cols = ['day0_features0']
     m_days_cols = ['day0_features']
     skip_size = CONFIG_PREPROCESS.ITEMS_PER_DAY  # rows to skip, for 1 Day (X & Y)
@@ -200,9 +208,8 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
         m_days_cols.append('day{}_features'.format(i))
 
     input_m = input_m.dropna().sort('CELL_NUM', 'dt')
-    input_m = input_m.withColumn('seq', row_number().over(m_window_spec)).filter(
-        'seq <= ' + str(input_m.groupBy("CELL_NUM").count().collect()[0]['count'] - int(skip_size))).drop(
-        'seq')  # drop data for X & Y
+    input_m = input_m.withColumn('seq', row_number().over(m_desc_window_spec)).filter(
+        'seq > ' + str(skip_size)).drop('seq').sort('CELL_NUM', 'dt')
     input_m = VectorAssembler().setInputCols(m_days_cols).setOutputCol('features').transform(input_m).select(
         ['dt', 'CELL_NUM', 'features'])  # assemble DAYS_TO_MEMORY days columns into one ('features')
 
