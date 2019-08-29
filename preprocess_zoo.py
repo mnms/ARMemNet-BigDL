@@ -220,9 +220,10 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
 def generate_dataset(df_assembled, CONFIG_PREPROCESS):
     valid_cell_size = len(CONFIG_PREPROCESS.VALID_CELL_IDS)
 
-    input_x = generate_dataset_x(df_assembled, CONFIG_PREPROCESS)
-    input_y = generate_dataset_y(df_assembled, CONFIG_PREPROCESS)
-    input_m = generate_dataset_m(df_assembled, CONFIG_PREPROCESS)
+    df_assembled = df_assembled.cache()
+    input_x = generate_dataset_x(df_assembled, CONFIG_PREPROCESS).cache()
+    input_y = generate_dataset_y(df_assembled, CONFIG_PREPROCESS).cache()
+    input_m = generate_dataset_m(df_assembled, CONFIG_PREPROCESS).cache()
 
     np_x = np.array(input_x.sort('dt', 'CELL_NUM').select('features').collect()).reshape(-1, valid_cell_size,
                                                                                          CONFIG_PREPROCESS.INPUT_X_SIZE,
