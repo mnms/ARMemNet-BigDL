@@ -6,10 +6,11 @@ from pyspark.context import SparkContext
 from pyspark.sql import SparkSession, SQLContext
 
 from pyspark.sql.types import StructType, StructField, TimestampType, DateType, FloatType, IntegerType
-from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, row_number, desc
+from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, min, max, row_number, desc
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
 
+import itertools
 import numpy as np
 import pandas as pd
 
@@ -59,57 +60,30 @@ def load_resampled_data(data_path):
 
     return df
 
-
 # nomarlize dataframe by given min/max (feat_minmax)
-def norm_df(df_to_norm, feat_minmax=[-1.0, 1.0], cols_to_exclude=['summary']):
-    # Get min, max vals from dataframe
-    cols_minmax = df_to_norm.describe().filter("summary = 'min' or summary = 'max'")  # Filter min/max row
-    cols_minmax = cols_minmax.select(
-        ["summary"] + [cols_minmax[c].cast("float") for c in cols_minmax.columns[1:]])  # Cast type from String to Float
-
-    cols_minmax_pd = cols_minmax.toPandas()
-
-    # Select Feat Columns
-    cols_to_norm = [c for c in cols_minmax.columns if c not in cols_to_exclude + ['summary']]
-
-    # Normalize
+def norm_df(df_to_norm, feat_minmax=(-1.0, 1.0), cols_to_exclude=('dt', 'CELL_NUM')):
+    cols_to_norm = [c for c in df_to_norm.columns if c not in cols_to_exclude]
+    aggregated_cols = list(itertools.chain(*([[min(c).alias(c + '_min'), max(c).alias(c + '_max')] for c in cols_to_norm])))
+    min_max_row = df_to_norm.select(aggregated_cols).collect()[0]
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_norm:
-        real_min = cols_minmax_pd[col][0].item()
-        real_max = cols_minmax_pd[col][1].item()
-
-        df_to_norm = df_to_norm.withColumn(col, (df_to_norm[col] - real_min) * (feat_max - feat_min) / (
-                    real_max - real_min) + feat_min)
-
-    return df_to_norm, cols_minmax
-
+        real_min = min_max_row[col + '_min']
+        real_max = min_max_row[col + '_max']
+        df_to_norm = df_to_norm.withColumn(col, (df_to_norm[col] - real_min) * (feat_max - feat_min) / (real_max - real_min) + feat_min)
+    return df_to_norm, min_max_row
 
 # un-nomarlization dataframe by given mix/max (real_minmax & feat_minmax)
-def unnorm_df(df_to_unnorm, real_minmax, feat_minmax=[-1.0, 1.0], cols_to_exclude=["summary"]):
-    # Select Feat Columns
-    # if "summary" not in cols_to_exclude:
-    #     cols_to_exclude.append("summary")
-    cols_to_unnorm = [c for c in real_minmax.columns if c not in cols_to_exclude + ['summary']]
-    cols_to_confirm = [c for c in df_to_unnorm.columns if c not in cols_to_exclude + ['summary']]
-
-    real_minmax_pd = real_minmax.toPandas()
-
-    # Check columns exactly match
-    if set(cols_to_unnorm) - set(cols_to_confirm) or set(cols_to_confirm) - set(cols_to_unnorm):
-        # TODO: Need Exception
-        print("TODO: Need Exception - Columns are not same")
-
+def unnorm_df(df_to_unnorm, min_max_row, feat_minmax=(-1.0, 1.0), cols_to_exclude=('dt', 'CELL_NUM')):
+    cols_to_unnorm = [c for c in df_to_unnorm.columns if c not in cols_to_exclude]
     # Unnomarlize
     feat_min = feat_minmax[0]
     feat_max = feat_minmax[1]
     for col in cols_to_unnorm:
-        real_min = real_minmax_pd[col][0].item()
-        real_max = real_minmax_pd[col][1].item()
-
+        real_min = min_max_row[col + '_min']
+        real_max = min_max_row[col + '_max']
         df_to_unnorm = df_to_unnorm.withColumn(col, (df_to_unnorm[col] - feat_min) / (feat_max - feat_min) * (
                     real_max - real_min) + real_min)
-
     return df_to_unnorm
 
 

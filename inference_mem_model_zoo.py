@@ -32,7 +32,7 @@ if __name__ == "__main__":
     df = load_resampled_data(resampled_csv_filename)
 
     # normalize
-    df_normed, df_minmax = norm_df(df, feat_minmax=config_preprocess.FEAT_MINMAX,
+    df_normed, min_max_row = norm_df(df, feat_minmax=config_preprocess.FEAT_MINMAX,
                                    cols_to_exclude=config_preprocess.COLS_TO_EXCLUDE)
 
     # filter valid cells after normalize (because of scaling factor)
