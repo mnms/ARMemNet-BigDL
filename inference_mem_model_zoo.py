@@ -13,6 +13,8 @@ from ARMem.config import Config
 from ARMem.model import Model
 from preprocess_zoo import *
 
+import time
+
 # to reproduce the results in test_mem_model.py
 # please set PARALLELISM to 1 and BATCH_PER_THREAD to 1022
 PARALLELISM=4
@@ -59,6 +61,7 @@ if __name__ == "__main__":
     model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
 
     #  export a TensorFlow model to frozen inference graph.
+    time_start = time.time()
     with tf.Session() as sess:
         saver = tf.train.Saver()
         saver.restore(sess, os.path.join(model_dir, config.model))
@@ -79,6 +82,9 @@ if __name__ == "__main__":
     outputs = tfnet.predict(sample_rdd,
                             batch_per_thread=BATCH_PER_THREAD,
                             distributed=True)
+    time_end = time.time()
+
+    print("Elapsed Time in Inferencing: {}".format(time_end - time_start))
 
     result_dir = make_date_dir(os.path.join(config.model, 'zoo_results/'))
 

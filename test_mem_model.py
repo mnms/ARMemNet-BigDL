@@ -33,6 +33,7 @@ def main():
                 raise Exception("model_dir or latest_model=True should be defined in config")
             model_dir = config.model_dir
 
+        time_start = time()
         model.restore_session(model_dir)
         if len(test_y) > 100000:
             # Batch mode
@@ -48,6 +49,8 @@ def main():
         else:
             # Not batch mode
             total_pred, test_loss, test_rse, test_smape, test_mae = model.eval(test_x, test_m, test_y)
+        time_end = time()
+        print("Elapsed Time in Inferencing: {}".format(time_end - time_start))
 
         result_dir = make_date_dir(os.path.join(config.model, 'results/'))
         np.save(os.path.join(result_dir, 'pred.npy'), total_pred)
