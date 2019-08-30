@@ -17,40 +17,32 @@ import time
 
 # to reproduce the results in test_mem_model.py
 # please set PARALLELISM to 1 and BATCH_PER_THREAD to 1022
-PARALLELISM=4
-BATCH_PER_THREAD=32
+PARALLELISM = 36
+# BATCH_PER_THREAD = 32
 
 
 if __name__ == "__main__":
-    # preprocess config
-    config_preprocess = PreprocessConfig()
-
-    # resampled csv, we'll change this later
-    resampled_csv_filename = "/user/nvkvs/data-sample/aggregated_resampled.csv"
-
-    # load resmapled data with given CELL_IDs
-    df = load_resampled_data(resampled_csv_filename)
-
-    # normalize
-    df_normed, min_max_row = norm_df(df, feat_minmax=config_preprocess.FEAT_MINMAX,
-                                   cols_to_exclude=config_preprocess.COLS_TO_EXCLUDE)
-
-    # filter valid cells after normalize (because of scaling factor)
-    df_normed = filter_valid_cells(df_normed, config_preprocess.VALID_CELL_IDS)
-
-    # assemble features in one column named 'features'
-    df_assembled = assemble_features(df_normed, cols_to_exclude=config_preprocess.COLS_TO_EXCLUDE)
-
-    # prepare test data
-    # train_x, train_y, train_m, valid_x, valid_y, valid_m, test_x, test_y, test_m = generate_dataset(df_assembled,
-    #                                                                                                 config_preprocess)
-
-    _, _, _, _, _, _, test_x, test_y, test_m = generate_dataset(df_assembled, config_preprocess)
-
-
     config = Config()
 
-    config.latest_model=False
+    # for testing, use same test arrays as tf-cpu does
+    _, _, test_x, _, _, test_y, _, _, test_m, test_dt = load_agg_selected_data_mem(data_path=config.data_path, \
+                                                                                   x_len=config.x_len, \
+                                                                                   y_len=config.y_len, \
+                                                                                   foresight=config.foresight, \
+                                                                                   cell_ids=config.test_cell_ids, \
+                                                                                   dev_ratio=config.dev_ratio, \
+                                                                                   test_len=config.test_len, \
+                                                                                   seed=config.seed)
+
+    # add dummy data
+    print(test_x.shape, test_y.shape, test_m.shape)
+    test_x = np.concatenate([test_x] * 200, axis=0)
+    test_m = np.concatenate([test_m] * 200, axis=0)
+    test_y = np.concatenate([test_y] * 200, axis=0)
+
+    print("Size of x,m,y : {}, {}, {} bytes, total {} GB".format(test_x.nbytes, test_m.nbytes, test_y.nbytes, (test_x.nbytes + test_m.nbytes + test_y.nbytes) / 1024 / 1024 / 1024))
+    print("Batch Size : {}".format(config.batch_size))
+
 
     model = Model(config)
 
@@ -61,7 +53,6 @@ if __name__ == "__main__":
     model_dir = find_latest_dir(os.path.join(config.model, 'model_save/'))
 
     #  export a TensorFlow model to frozen inference graph.
-    time_start = time.time()
     with tf.Session() as sess:
         saver = tf.train.Saver()
         saver.restore(sess, os.path.join(model_dir, config.model))
@@ -80,14 +71,16 @@ if __name__ == "__main__":
 
     # distributed inference on Spark and return an RDD
     outputs = tfnet.predict(sample_rdd,
-                            batch_per_thread=BATCH_PER_THREAD,
+                            batch_per_thread=config.batch_size,
                             distributed=True)
+
+    # check time when trigger actions
+    time_start = time.time()
+    outputs.collect()
     time_end = time.time()
 
     print("Elapsed Time in Inferencing: {}".format(time_end - time_start))
 
     result_dir = make_date_dir(os.path.join(config.model, 'zoo_results/'))
 
-    outputs.saveAsTextFile(os.path.join(result_dir, "result.txt"))
-
-
+    # outputs.saveAsTextFile(os.path.join(result_dir, "result.txt"))
