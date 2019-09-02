@@ -149,9 +149,9 @@ def load_agg_selected_data_mem(
     full_dt_lst = []
     full_x_lst = []
     full_cell_lst = []
-    cell_list = [18]
-    for cell_id in cell_list: # config 
-        
+
+    for cell_id in cell_ids: # CELL_IDs from config
+
         cell_data = data[data['CELL_NUM']==cell_id]
         grouped = cell_data.groupby(pd.Grouper(freq='D'))
 
@@ -190,7 +190,7 @@ def load_agg_selected_data_mem(
         full_dt_lst.append(m_dt)
         
     # [slided, ncells, day, nsteps, nfeatures]
-    print("after day window sliding")
+    logger.info("after day window sliding")
     full_m = np.stack(full_m_lst, axis=1) # [slided, ncells, day, nsteps+1, nfeatures]
     full_x = np.stack(full_x_lst, axis=1) # [slided, ncells, day, nsteps, nfeatures]
     full_y = np.stack(full_y_lst, axis=1) # [slided, ncells, day, 1, nfeatures]
@@ -198,7 +198,7 @@ def load_agg_selected_data_mem(
     full_cell = np.stack(full_cell_lst, axis=1)  # [slided, ncells, day, 1]
 
     for arg in [full_m, full_x, full_y, full_dt, full_cell]:
-        print(arg.shape)
+        logger.info(arg.shape)
     
     # memory sliding for each cell
     x_start_day = mem_len+1
@@ -226,16 +226,17 @@ def load_agg_selected_data_mem(
     total_m = np.concatenate(total_m, axis=0)
     total_m = np.reshape(total_m, [total_m.shape[0], total_m.shape[1], -1, total_m.shape[-1]])
     total_dt_cell0 = total_dt[:, 0, :]
-    
+
     # squeezing
     total_y = np.squeeze(total_y)
-    total_y = np.expand_dims(total_y, axis=1)     ## warning : only when using 1 cell !!
+    if len(cell_ids) == 1:
+        total_y = np.expand_dims(total_y, axis=1)     ## warning : only when using 1 cell !!
     total_dt_cell0 = np.squeeze(total_dt_cell0)
     total_dt = np.squeeze(total_dt)
     total_cell= np.squeeze(total_cell)
-    print("after memory sliding")
+    logger.info("after memory sliding")
     for arg in [total_x, total_y, total_dt, total_cell, total_m]:
-        print(arg.shape)
+        logger.info(arg.shape)
 
     # decide test_ind for test tuples
     end_dt = pd.to_datetime(total_dt_cell0[-1])
@@ -253,7 +254,7 @@ def load_agg_selected_data_mem(
             test_ind = i+1
             break
     assert test_ind != -1
-    print("test ind: {}".format(test_ind))
+    logger.info("test ind: {}".format(test_ind))
 
     tr_x = total_x[:test_ind]
     tr_y = total_y[:test_ind]
@@ -286,7 +287,7 @@ def load_agg_selected_data_mem(
     tr_ind = np.ones(len(tr_x), np.bool)
     tr_ind[dev_ind] = 0
     train_x, dev_x = tr_x[tr_ind], tr_x[dev_ind]
-    print(tr_y.shape)
+    logger.info(tr_y.shape)
     train_y, dev_y = tr_y[tr_ind], tr_y[dev_ind]
     train_m, dev_m = tr_m[tr_ind], tr_m[dev_ind]
     train_c, dev_c = tr_c[tr_ind], tr_c[dev_ind]
@@ -308,9 +309,9 @@ def load_agg_data_all(data_path='../data/aggregated_data_5min_scaled.csv', ncell
 
     full_x = []
 
-    for cell_id in range(ncells): # config       
+    for cell_id in range(ncells): # config
         cell_data = data[data['CELL_NUM']==cell_id]
-        
+
         # Find last test_len days to generate cell vectors
         end_dt = cell_data.index.date[-1]
         from datetime import timedelta
@@ -322,7 +323,7 @@ def load_agg_data_all(data_path='../data/aggregated_data_5min_scaled.csv', ncell
     full_x = np.expand_dims(full_x, axis=0)
     full_x = full_x[:, :, :, :-1]
 
-    print("-----------------------------")              
+    print("-----------------------------")
     print("input shape: {}".format(full_x.shape))
     print("-----------------------------")
 

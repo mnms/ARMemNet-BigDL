@@ -24,7 +24,8 @@ class Config(object):
 
         # train & test params
         self.train_cell_ids = [11, 16, 18]  # order of cell_id in "../config_preprocess.py"
-        self.test_cell_ids = [18]           # order of cell_id in "../config_preprocess.py"
+        # self.test_cell_ids = [18]           # order of cell_id in "../config_preprocess.py"
+        self.test_cell_ids = list(range(20))  # order of cell_id in "../config_preprocess.py"
         self.model_dir = None       # Model directory to use in test mode. For example, "model_save/20190405-05"
         self.latest_model = True    # Use lately saved model in test mode. If latest_model=True, model_dir option will be ignored
 

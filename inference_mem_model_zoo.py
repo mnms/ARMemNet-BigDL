@@ -36,9 +36,9 @@ if __name__ == "__main__":
 
     # add dummy data
     print(test_x.shape, test_y.shape, test_m.shape)
-    test_x = np.concatenate([test_x] * 200, axis=0)
-    test_m = np.concatenate([test_m] * 200, axis=0)
-    test_y = np.concatenate([test_y] * 200, axis=0)
+    test_x = np.concatenate([test_x] * 10, axis=0)
+    test_m = np.concatenate([test_m] * 10, axis=0)
+    test_y = np.concatenate([test_y] * 10, axis=0)
 
     print("Size of x,m,y : {}, {}, {} bytes, total {} GB".format(test_x.nbytes, test_m.nbytes, test_y.nbytes, (test_x.nbytes + test_m.nbytes + test_y.nbytes) / 1024 / 1024 / 1024))
     print("Batch Size : {}".format(config.batch_size))
