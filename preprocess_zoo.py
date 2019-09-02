@@ -108,16 +108,16 @@ def generate_dataset_x_y(df_assembled, CONFIG_PREPROCESS):
 
     x_head_skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY
     shuffled_with_cell = df_assembled.withColumn('seq', row_number().over(x_window_spec)).cache()
-
-    input_x = shuffled_with_cell.filter('seq > ' + str(x_head_skip_size)).filter(
-        shuffled_with_cell['seq'] > x_head_skip_size)
+    input_x = shuffled_with_cell.filter('seq > ' + str(x_head_skip_size))
 
     x_feat_cols = ['features0']
     input_x = input_x.withColumnRenamed('features', x_feat_cols[0])
+    vector_udt_metadata = input_x.schema[input_x.schema.fields.index(input_x.schema[x_feat_cols[0]])].metadata
 
     for i in range(1, CONFIG_PREPROCESS.INPUT_X_SIZE):
         n_features = lead(col(x_feat_cols[0]), i).over(x_window_spec)
-        input_x = input_x.withColumn('features' + str(i), n_features)
+        col_name = 'features' + str(i)
+        input_x = input_x.withColumn('features' + str(i), n_features.alias(col_name, metadata=vector_udt_metadata))
         x_feat_cols.append('features{}'.format(i))
 
     x_tail_skip_size = CONFIG_PREPROCESS.INPUT_X_SIZE + CONFIG_PREPROCESS.INPUT_Y_SIZE - 1
@@ -141,26 +141,28 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
 
     shuffled_with_cell = df_assembled.withColumn('seq', row_number().over(m_window_spec)).cache()
     input_m = shuffled_with_cell.withColumnRenamed('features', m_feat_cols[0])
-
+    vector_udt_metadata = input_m.schema[input_m.schema.fields.index(input_m.schema[m_feat_cols[0]])].metadata
     # Generate 1 day data (5min * 10 data)
     for i in range(1, CONFIG_PREPROCESS.INPUT_M_SIZE):
         n_features = lead(col(m_feat_cols[0]), i).over(m_window_spec)
-        input_m = input_m.withColumn('day{}_features{}'.format(0, i), n_features)
+        col_name = 'day{}_features{}'.format(0, i)
+        input_m = input_m.withColumn(col_name, n_features.alias(col_name, metadata=vector_udt_metadata))
         m_feat_cols.append('day{}_features{}'.format(0, i))
 
     input_m = input_m.dropna()
+
     input_m = VectorAssembler().setInputCols(m_feat_cols).setOutputCol(m_days_cols[0]).transform(input_m)
+    vector_udt_metadata = input_m.schema[-1].metadata
 
     # for DAYS_TO_MEMORY(7) days memory in same time zone
     for i in range(1, CONFIG_PREPROCESS.DAYS_TO_MEMORY):
         n_features = lead(col('day0_features'), int(CONFIG_PREPROCESS.ITEMS_PER_DAY * i)).over(m_window_spec)
-        input_m = input_m.withColumn('day{}_features'.format(i), n_features)
+        col_name = 'day{}_features'.format(i)
+        input_m = input_m.withColumn(col_name, n_features.alias(col_name,  metadata=vector_udt_metadata))
         m_days_cols.append('day{}_features'.format(i))
 
-    m_tail_skip_size = CONFIG_PREPROCESS.ITEMS_PER_DAY  # rows to skip, for 1 Day (X & Y)
-    inbound = when(input_m['seq'] <= (
-                max(input_m['seq']).over(m_window_spec.rangeBetween(-sys.maxsize, sys.maxsize)) - m_tail_skip_size),
-                   1).otherwise(0)
+    m_tail_skip_size = CONFIG_PREPROCESS.ITEMS_PER_DAY # rows to skip, for 1 Day (X & Y)
+    inbound = when(input_m['seq'] <= (max(input_m['seq']).over(m_window_spec.rangeBetween(-sys.maxsize, sys.maxsize)) - m_tail_skip_size), 1).otherwise(0)
     input_m = input_m.dropna().withColumn('inbound', inbound).filter('inbound == 1')
     input_m = VectorAssembler().setInputCols(m_days_cols).setOutputCol('features').transform(input_m).select(
         ['dt', 'CELL_NUM', 'features'])  # assemble DAYS_TO_MEMORY days columns into one ('features')
@@ -175,13 +177,13 @@ def generate_dataset(df_assembled, CONFIG_PREPROCESS):
     (input_x, input_y) = generate_dataset_x_y(df_assembled, CONFIG_PREPROCESS)
     input_m = generate_dataset_m(df_assembled, CONFIG_PREPROCESS)
 
-    np_x = np.array(input_x.sort('dt', 'CELL_NUM').select('features').collect()).reshape(-1, valid_cell_size,
+    np_x = np.array(input_x.select('features').collect()).reshape(-1, valid_cell_size,
                                                                                          CONFIG_PREPROCESS.INPUT_X_SIZE,
                                                                                          CONFIG_PREPROCESS.FEATURE_SIZE)  # [slided, cells, INPUT_X_SIZE, features]
-    np_y = np.array(input_y.sort('dt', 'CELL_NUM').select('features').collect()).reshape(-1, valid_cell_size,
+    np_y = np.array(input_y.select('features').collect()).reshape(-1, valid_cell_size,
                                                                                          CONFIG_PREPROCESS.INPUT_Y_SIZE,
                                                                                          CONFIG_PREPROCESS.FEATURE_SIZE)  # [slided, cells, INPUT_Y_SIZE, features]
-    np_m = np.array(input_m.sort('dt', 'CELL_NUM').select('features').collect()).reshape(-1, valid_cell_size,
+    np_m = np.array(input_m.select('features').collect()).reshape(-1, valid_cell_size,
                                                                                          CONFIG_PREPROCESS.INPUT_M_SIZE * CONFIG_PREPROCESS.DAYS_TO_MEMORY,
                                                                                          CONFIG_PREPROCESS.FEATURE_SIZE)  # [slided, cells, INPUT_M_SIZE * DAYS_TO_MEMORY, features]
 
