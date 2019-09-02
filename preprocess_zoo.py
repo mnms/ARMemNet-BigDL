@@ -6,13 +6,14 @@ from pyspark.context import SparkContext
 from pyspark.sql import SparkSession, SQLContext
 
 from pyspark.sql.types import StructType, StructField, TimestampType, DateType, FloatType, IntegerType
-from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, min, max, row_number, desc
+from pyspark.sql.functions import expr, col, column, array, lit, create_map, monotonically_increasing_id, lead, min, max, row_number, desc, when
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
 
 import itertools
 import numpy as np
 import pandas as pd
+import sys
 
 # Config for Preprocessing
 class PreprocessConfig():
@@ -89,81 +90,57 @@ def unnorm_df(df_to_unnorm, min_max_row, feat_minmax=(-1.0, 1.0), cols_to_exclud
 
 # extract valid CELL_IDs
 def filter_valid_cells(df, valid_cell_ids):
-    df = df.filter('CELL_NUM IN (' + ', '.join(str(cell_id) for cell_id in valid_cell_ids) + ')').sort('CELL_NUM', 'dt')
-
+    df = df.filter('CELL_NUM IN (' + ', '.join(str(cell_id) for cell_id in valid_cell_ids) + ')')
     return df
-
 
 # assemble all features in One column without 'dt' and 'CELL_NUM'
 def assemble_features(df_to_assemble, cols_to_exclude=['dt', 'CELL_NUM']):
     feat_cols = [c for c in df_to_assemble.columns if c not in cols_to_exclude]
 
     df_feat_assembled = VectorAssembler().setInputCols(feat_cols).setOutputCol("features").transform(
-        df_to_assemble).select(['dt', 'features', 'CELL_NUM'])
-    df_feat_assembled = df_feat_assembled.sort('CELL_NUM', 'dt')
+        df_to_assemble).select(['dt', 'CELL_NUM', 'features'])
 
     return df_feat_assembled
 
+# Generate Dataset for X & Y
+def generate_dataset_x_y(df_assembled, CONFIG_PREPROCESS):
+    x_window_spec = Window.partitionBy('CELL_NUM').orderBy('dt')
 
-# Generate Dataset for X
-def generate_dataset_x(df_assembled, CONFIG_PREPROCESS):
-    x_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt')
-    x_desc_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', desc('dt'))
+    x_head_skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY
+    shuffled_with_cell = df_assembled.withColumn('seq', row_number().over(x_window_spec)).cache()
+
+    input_x = shuffled_with_cell.filter('seq > ' + str(x_head_skip_size)).filter(
+        shuffled_with_cell['seq'] > x_head_skip_size)
+
     x_feat_cols = ['features0']
-    skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY
-
-    # select cols from raw dataframe
-    input_x = df_assembled.select(['dt', 'CELL_NUM', 'features']).withColumnRenamed('features', x_feat_cols[0])
-
-    # drop data for INPUT_M
-    input_x = input_x.withColumn('seq',
-                                 row_number().over(Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt'))).filter(
-        'seq > ' + str(skip_size)).drop('seq').sort('CELL_NUM', 'dt')
+    input_x = input_x.withColumnRenamed('features', x_feat_cols[0])
 
     for i in range(1, CONFIG_PREPROCESS.INPUT_X_SIZE):
         n_features = lead(col(x_feat_cols[0]), i).over(x_window_spec)
         input_x = input_x.withColumn('features' + str(i), n_features)
         x_feat_cols.append('features{}'.format(i))
 
-    # [dt, CELL_NUM, [INPUT_X_SIZE] steps, 8 features]
-    input_x = input_x.dropna().sort('CELL_NUM',
-                                    'dt')  # DROP 9 Rows which has null value with 20 Cells (9 * 20 = 180 Rows)
-
-    # drop data for INPUT_Y
-    input_x = input_x.withColumn('seq', row_number().over(x_desc_window_spec)).filter(
-        'seq > ' + str(CONFIG_PREPROCESS.INPUT_Y_SIZE)).drop('seq')
-
-    # [dt, CELL_NUM, 8 features x [INPUT_X_SIZE] steps]
+    x_tail_skip_size = CONFIG_PREPROCESS.INPUT_X_SIZE + CONFIG_PREPROCESS.INPUT_Y_SIZE - 1
+    inbound = when(input_x['seq'] <= (
+                max(input_x['seq']).over(x_window_spec.rangeBetween(-sys.maxsize, sys.maxsize)) - x_tail_skip_size),
+                   1).otherwise(0)
+    input_x = input_x.withColumn('inbound', inbound).filter('inbound == 1')
     input_x = VectorAssembler().setInputCols(x_feat_cols).setOutputCol('features').transform(input_x).select(
-        ['dt', 'CELL_NUM', 'features']).sort('CELL_NUM', 'dt')
+        ['dt', 'CELL_NUM', 'features'])
 
-    return input_x
+    y_head_skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY + CONFIG_PREPROCESS.INPUT_X_SIZE  # rows to skip, for M & X
+    input_y = shuffled_with_cell.filter('seq > ' + str(y_head_skip_size)).drop('seq')
 
-
-# Generate Dataset for Y
-def generate_dataset_y(df_assembled, CONFIG_PREPROCESS):
-    y_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt')
-    skip_size = CONFIG_PREPROCESS.DAYS_TO_MEMORY * CONFIG_PREPROCESS.ITEMS_PER_DAY + CONFIG_PREPROCESS.INPUT_X_SIZE  # rows to skip, for M & X
-
-    # select cols from raw dataframe
-    input_y = df_assembled.select(['dt', 'CELL_NUM', 'features'])
-
-    input_y = input_y.withColumn('seq', row_number().over(y_window_spec)).filter('seq > ' + str(skip_size)).drop(
-        'seq').sort('CELL_NUM', 'dt')
-
-    return input_y
-
+    return input_x, input_y
 
 # Generate Dataset for M
 def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
-    m_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', 'dt')
-    m_desc_window_spec = Window.partitionBy('CELL_NUM').orderBy('CELL_NUM', desc('dt'))
+    m_window_spec = Window.partitionBy('CELL_NUM').orderBy('dt')
     m_feat_cols = ['day0_features0']
     m_days_cols = ['day0_features']
-    skip_size = CONFIG_PREPROCESS.ITEMS_PER_DAY  # rows to skip, for 1 Day (X & Y)
 
-    # select cols from raw dataframe
-    input_m = df_assembled.select(['dt', 'CELL_NUM', 'features']).withColumnRenamed('features', m_feat_cols[0])
+    shuffled_with_cell = df_assembled.withColumn('seq', row_number().over(m_window_spec)).cache()
+    input_m = shuffled_with_cell.withColumnRenamed('features', m_feat_cols[0])
 
     # Generate 1 day data (5min * 10 data)
     for i in range(1, CONFIG_PREPROCESS.INPUT_M_SIZE):
@@ -171,9 +148,8 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
         input_m = input_m.withColumn('day{}_features{}'.format(0, i), n_features)
         m_feat_cols.append('day{}_features{}'.format(0, i))
 
-    input_m = input_m.dropna().sort('CELL_NUM', 'dt')
-    input_m = VectorAssembler().setInputCols(m_feat_cols).setOutputCol(m_days_cols[0]).transform(input_m).select(
-        ['dt', 'CELL_NUM', 'day0_features'])
+    input_m = input_m.dropna()
+    input_m = VectorAssembler().setInputCols(m_feat_cols).setOutputCol(m_days_cols[0]).transform(input_m)
 
     # for DAYS_TO_MEMORY(7) days memory in same time zone
     for i in range(1, CONFIG_PREPROCESS.DAYS_TO_MEMORY):
@@ -181,23 +157,23 @@ def generate_dataset_m(df_assembled, CONFIG_PREPROCESS):
         input_m = input_m.withColumn('day{}_features'.format(i), n_features)
         m_days_cols.append('day{}_features'.format(i))
 
-    input_m = input_m.dropna().sort('CELL_NUM', 'dt')
-    input_m = input_m.withColumn('seq', row_number().over(m_desc_window_spec)).filter(
-        'seq > ' + str(skip_size)).drop('seq').sort('CELL_NUM', 'dt')
+    m_tail_skip_size = CONFIG_PREPROCESS.ITEMS_PER_DAY  # rows to skip, for 1 Day (X & Y)
+    inbound = when(input_m['seq'] <= (
+                max(input_m['seq']).over(m_window_spec.rangeBetween(-sys.maxsize, sys.maxsize)) - m_tail_skip_size),
+                   1).otherwise(0)
+    input_m = input_m.dropna().withColumn('inbound', inbound).filter('inbound == 1')
     input_m = VectorAssembler().setInputCols(m_days_cols).setOutputCol('features').transform(input_m).select(
         ['dt', 'CELL_NUM', 'features'])  # assemble DAYS_TO_MEMORY days columns into one ('features')
 
     return input_m
-
 
 # Generate All Dataset, return as NumPy Array
 def generate_dataset(df_assembled, CONFIG_PREPROCESS):
     valid_cell_size = len(CONFIG_PREPROCESS.VALID_CELL_IDS)
 
     df_assembled = df_assembled.cache()
-    input_x = generate_dataset_x(df_assembled, CONFIG_PREPROCESS).cache()
-    input_y = generate_dataset_y(df_assembled, CONFIG_PREPROCESS).cache()
-    input_m = generate_dataset_m(df_assembled, CONFIG_PREPROCESS).cache()
+    (input_x, input_y) = generate_dataset_x_y(df_assembled, CONFIG_PREPROCESS)
+    input_m = generate_dataset_m(df_assembled, CONFIG_PREPROCESS)
 
     np_x = np.array(input_x.sort('dt', 'CELL_NUM').select('features').collect()).reshape(-1, valid_cell_size,
                                                                                          CONFIG_PREPROCESS.INPUT_X_SIZE,
