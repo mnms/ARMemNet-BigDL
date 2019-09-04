@@ -10,7 +10,8 @@ from ARMem.model import Model
 # to reproduce the results in test_mem_model.py
 # please set PARALLELISM to 1 and BATCH_PER_THREAD to 1022
 from zoo.util.tf import export_tf
-
+import os
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 if __name__ == "__main__":
     config = Config()
@@ -36,8 +37,8 @@ if __name__ == "__main__":
     test_x = np.concatenate([test_x] * 200, axis=0)
     test_m = np.concatenate([test_m] * 200, axis=0)
 
-    np.save("./data/test_x.npy", test_x)
-    np.save("./data/test_m.npy", test_m)
+    np.save(os.path.join(dir_path, "data/test_x.npy"), test_x)
+    np.save(os.path.join(dir_path, "data/test_m.npy"), test_m)
 
     model_dir = config.model_dir
 
@@ -46,5 +47,5 @@ if __name__ == "__main__":
         saver = tf.train.Saver()
         saver.restore(sess, os.path.join(model_dir, config.model))
 
-        export_tf(sess, "./tfnet", inputs=[model.input_x, model.memories], outputs=[model.predictions])
+        export_tf(sess, os.path.join(dir_path, "tfnet"), inputs=[model.input_x, model.memories], outputs=[model.predictions])
 
