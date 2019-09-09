@@ -84,16 +84,22 @@ object Main {
 
     modelRdd.count()
 
-    val results = inputRdd.zipPartitions(modelRdd) { case (dataIter, modelIter) =>
+    val resultsRDD = inputRdd.zipPartitions(modelRdd) { case (dataIter, modelIter) =>
+      val start = System.nanoTime()
       val model = modelIter.next()
       val result = dataIter.toArray.map(model.forward)
-      result.toIterator
+      val iter = result.toIterator
+      val end = System.nanoTime()
+      println(s"pure inference time in partition is ${(end - start)/1.0e9}s")
+      iter ++ Array(Tensor.scalar[Float](end - start))
     }
 
     var start = System.nanoTime()
-    results.collect()
+    val results = resultsRDD.collect()
     var end = System.nanoTime()
-    println(s"time is ${(end - start)/1.0e9}s")
+    println(s"spark job time is ${(end - start)/1.0e9}s")
+    val eachPartitionTime = results.map(_.toTensor[Float]).filter(_.isScalar).map(_.value())
+    println(s"Max pure inference time in each partition ${eachPartitionTime.max/1.0e9}")
   }
 
   def main(args: Array[String]): Unit = {
