@@ -94,10 +94,7 @@ object Main {
       iter ++ Array(Tensor.scalar[Float](end - start))
     }
 
-    var start = System.nanoTime()
     val results = resultsRDD.collect()
-    var end = System.nanoTime()
-    println(s"spark job time is ${(end - start)/1.0e9}s")
     val eachPartitionTime = results.map(_.toTensor[Float]).filter(_.isScalar).map(_.value())
     println(s"Max pure inference time in each partition ${eachPartitionTime.max/1.0e9}")
   }
