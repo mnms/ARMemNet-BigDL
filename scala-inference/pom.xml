@@ -13,12 +13,20 @@
         <scala.major.version>2.11</scala.major.version>
         <scala.version>2.11.8</scala.version>
         <scalatest.version>2.2.4</scalatest.version>
-        <spark.major.version>2.1</spark.major.version>
-        <spark.version>2.1.1</spark.version>
+        <spark.major.version>2.3</spark.major.version>
+        <spark.version>2.3.1</spark.version>
         <spark-scope>compile</spark-scope>
         <encoding>UTF-8</encoding>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
+
+    <repositories>
+        <repository>
+            <id>spring-lib-release</id>
+            <name>Spring Lib Release Repository</name>
+            <url>https://repo.spring.io/libs-release</url>
+        </repository>
+    </repositories>
 
     <dependencies>
         <dependency>
