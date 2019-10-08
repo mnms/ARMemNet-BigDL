@@ -5,6 +5,12 @@ if [ -z "${ANALYTICS_ZOO_HOME}" ]; then
 fi
 
 FLASHBASE_LIB=''
+
+if [ -z "${FLASHBASE_LIB}" ]; then
+    echo "please set path of flashbase libraries"
+    exit 1
+fi
+
 FLASHBASE_CLASSPATH=$(find $FLASHBASE_LIB -name 'tsr2*' -o -name 'spark-r2*' -o -name '*jedis*' -o -name 'commons*' -o -name 'jdeferred*' \
 -o -name 'geospark*' -o -name 'gt-*' | tr '\n' ':')
 TF_NET_PATH=''
