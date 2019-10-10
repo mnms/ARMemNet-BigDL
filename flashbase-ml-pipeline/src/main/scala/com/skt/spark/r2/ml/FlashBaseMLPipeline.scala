@@ -47,30 +47,41 @@ object FlashBaseMLPipeline {
     end = System.nanoTime()
     println(s"The time of building Memory-Queue is ${(end - start) / 1.0e9}s")
 
-    start = System.nanoTime()
-    buildTensorRDD(
-      buildInputFeatures(normR2Df, afterMinutes(initialTime, 5), cachedInputQueue),
-      buildMemoryFeatures(normR2Df, beforeDays(afterMinutes(initialTime, 10), 1), cachedMemoryQueue),
-      batchSize)
-      .collect()
-    end = System.nanoTime()
-    println(s"The time of pre-processing is ${(end - start) / 1.0e9}s")
+    var avg = 0L
+    for (i <- 0 until 5) {
+      start = System.nanoTime()
+      buildTensorRDD(
+        buildInputFeatures(normR2Df, afterMinutes(initialTime, 5), cachedInputQueue),
+        buildMemoryFeatures(normR2Df, beforeDays(afterMinutes(initialTime, 10), 1), cachedMemoryQueue),
+        batchSize)
+        .collect()
+      end = System.nanoTime()
+      avg += (end - start)
+      println(s"Try #${i + 1} : The time of pre-processing is ${(end - start) / 1.0e9}s")
+    }
+    println(s"AVG time of pre-processing is ${(avg / 5) / 1.0e9}s")
+    avg = 0L
+
 
     start = System.nanoTime()
     val btfnet = ModelBroadcast[Float]().broadcast(sparkContext, TFNet(tfNetPath))
     end = System.nanoTime()
     println(s"The time of broadcasting model is ${(end - start) / 1.0e9}s")
 
-    start = System.nanoTime()
-    buildInferenceRDD(
-      buildTensorRDD(
-        buildInputFeatures(normR2Df, afterMinutes(initialTime, 5), cachedInputQueue),
-        buildMemoryFeatures(normR2Df, beforeDays(afterMinutes(initialTime, 10), 1), cachedMemoryQueue),
-        batchSize),
-      btfnet
-    ).collect()
-    end = System.nanoTime()
-    println(s"Total time of pre-processing and inference is ${(end - start) / 1.0e9}s")
+    for (i <- 0 until 5) {
+      start = System.nanoTime()
+      buildInferenceRDD(
+        buildTensorRDD(
+          buildInputFeatures(normR2Df, afterMinutes(initialTime, 5), cachedInputQueue),
+          buildMemoryFeatures(normR2Df, beforeDays(afterMinutes(initialTime, 10), 1), cachedMemoryQueue),
+          batchSize),
+        btfnet
+      ).collect()
+      end = System.nanoTime()
+      avg += (end - start)
+      println(s"Try #${i + 1} : The time of pre-processing and inference is ${(end - start) / 1.0e9}s")
+    }
+    println(s"AVG time of pre-processing and inference is ${(avg / 5) / 1.0e9}s")
   }
 
   /**
