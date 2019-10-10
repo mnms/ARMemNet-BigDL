@@ -57,12 +57,17 @@ object FlashBaseMLPipeline {
     println(s"The time of pre-processing is ${(end - start) / 1.0e9}s")
 
     start = System.nanoTime()
+    val btfnet = ModelBroadcast[Float]().broadcast(sparkContext, TFNet(tfNetPath))
+    end = System.nanoTime()
+    println(s"The time of broadcasting model is ${(end - start) / 1.0e9}s")
+
+    start = System.nanoTime()
     buildInferenceRDD(
       buildTensorRDD(
         buildInputFeatures(normR2Df, afterMinutes(initialTime, 5), cachedInputQueue),
         buildMemoryFeatures(normR2Df, beforeDays(afterMinutes(initialTime, 10), 1), cachedMemoryQueue),
         batchSize),
-      tfNetPath
+      btfnet
     ).collect()
     end = System.nanoTime()
     println(s"Total time of pre-processing and inference is ${(end - start) / 1.0e9}s")
@@ -228,9 +233,7 @@ object FlashBaseMLPipeline {
   /**
     * Create inferenceRDD which applies tfModel to the tensorRDD.
     */
-  def buildInferenceRDD(tensorRDD: RDD[Table], tfNetworkPath: String): RDD[Activity] = {
-    val btfnet = ModelBroadcast[Float]().broadcast(sparkContext, TFNet(tfNetworkPath))
-
+  def buildInferenceRDD(tensorRDD: RDD[Table], btfnet: ModelBroadcast[Float]): RDD[Activity] = {
     tensorRDD.mapPartitions(
       iterTable => {
         iterTable.toArray.map(btfnet.value().forward).toIterator

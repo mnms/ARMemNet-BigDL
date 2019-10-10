@@ -18,6 +18,7 @@ DRIVER_MEMORY="40g"
 FLASHBASE_HOST=fbg02
 FLASHBASE_PORT=18700
 BATCH_SIZE=512
+SPARK_LOCAL_DIRS=/tmp
 
 echo $COMMON_CLASSPATH
 if [ -z "${TF_NET_PATH}" ]; then
@@ -31,5 +32,6 @@ dir_path=$(dirname $full_path)
 bash $dir_path/../../scala-inference/bin/spark-submit-scala-with-zoo.sh --master "local[*]" \
 --driver-memory $DRIVER_MEMORY --driver-class-path $FLASHBASE_CLASSPATH \
 --conf spark.executor.extraClassPath=$FLASHBASE_CLASSPATH \
+--conf spark.local.dir=$SPARK_LOCAL_DIRS \
 --class com.skt.spark.r2.ml.FlashBaseMLPipeline ../target/flashbase-ml-pipeline-1.0-SNAPSHOT.jar \
 $TF_NET_PATH $FLASHBASE_HOST $FLASHBASE_PORT $BATCH_SIZE
