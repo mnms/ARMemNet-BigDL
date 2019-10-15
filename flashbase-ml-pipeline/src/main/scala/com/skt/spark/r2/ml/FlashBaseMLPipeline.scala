@@ -11,7 +11,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.types._
 
 import scala.collection.immutable
@@ -21,7 +21,7 @@ object FlashBaseMLPipeline {
 
   import DateUtil._
 
-  var spark: SparkSession = _
+  var sqlContext: SQLContext = _
   var sparkContext: SparkContext = _
 
   def main(args: Array[String]) {
@@ -30,8 +30,8 @@ object FlashBaseMLPipeline {
     val fbPort = args(2).toInt
     val batchSize = args(3).toInt
 
-    spark = SparkSession.builder().appName("fb-ml-pipeline").getOrCreate()
-    sparkContext = NNContext.initNNContext()
+    sparkContext = NNContext.initNNContext("fb-ml-pipeline")
+    sqlContext= new SQLContext(sparkContext)
 
     val initialTime = "20190920094500"
     val normR2Df = normalizedDF(createR2DataFrame(fbHost, fbPort))
@@ -61,7 +61,6 @@ object FlashBaseMLPipeline {
     }
     println(s"AVG time of pre-processing is ${(avg / 5) / 1.0e9}s")
     avg = 0L
-
 
     start = System.nanoTime()
     val btfnet = ModelBroadcast[Float]().broadcast(sparkContext, TFNet(tfNetPath))
@@ -226,18 +225,15 @@ object FlashBaseMLPipeline {
       (iterInput, iterMemory) =>
         val inputMap = iterInput.next()
         val memoryMap = iterMemory.next()
-        inputMap.iterator.map {
+        val pairedInputXM = inputMap.map {
           case (cellId: Int, inputFs: mutable.ArrayBuffer[Array[Float]]) =>
             val memoryFs = memoryMap(cellId)
             (inputFs.flatten.toArray, memoryFs.flatMap(fs => fs.flatten))
-        }.grouped(batchSize).map {
-          tensors: Seq[(Array[Float], Array[Float])] =>
-            val x = tensors.flatMap(_._1).toArray
-            val m = tensors.flatMap(_._2).toArray
-            val inputXData = Tensor[Float](x, Array(x.length / 10 / 8, 10, 8))
-            val inputMData = Tensor[Float](m, Array(m.length / 77 / 8, 77, 8))
-            T(inputXData, inputMData)
-        }
+        }.toArray
+        val xData = pairedInputXM.flatMap(_._1)
+        val mData = pairedInputXM.flatMap(_._2)
+        Iterator.single(T(Tensor[Float](xData, Array(xData.length / 10 / 8, 10, 8)),
+          Tensor[Float](mData, Array(mData.length / 77 / 8, 77, 8))))
     }
   }
 
@@ -276,7 +272,7 @@ object FlashBaseMLPipeline {
       }
 
     val schema = StructType(fields)
-    val r2Df = spark.read.format("r2")
+    val r2Df = sqlContext.read.format("r2")
       .options(params)
       .schema(schema)
       .load()
