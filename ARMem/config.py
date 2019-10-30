@@ -13,7 +13,7 @@ class Config(object):
         self.ar_g = 1
 
         # data params
-        self.data_path = '../data/aggregated_5min_scaled.csv'
+        self.data_path = '/home/yang/sources/ARMemNet-BigDL/data/aggregated_5min_scaled.csv'
         self.nfeatures = 8  # number of col_list in "../config_preprocess.py"
         self.x_len = self.nsteps
         self.y_len = 1

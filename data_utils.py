@@ -16,7 +16,7 @@ def batch_loader(iterable, batch_size, shuffle=False):
      
 
 def load_agg_data(
-        data_path='../data/aggregated_5min_scaled.csv',
+        data_path='/home/yang/sources/ARMemNet-BigDL/data/aggregated_5min_scaled.csv',
         x_len=10,
         y_len=1,
         ncells=20,
@@ -125,7 +125,7 @@ def load_agg_data(
 
 
 def load_agg_selected_data_mem(
-        data_path='../data/aggregated_5min_scaled.csv',
+        data_path='/home/yang/sources/ARMemNet-BigDL/data/aggregated_5min_scaled.csv',
         x_len=10,
         y_len=1,
         mem_len=7,
@@ -302,7 +302,7 @@ def load_agg_selected_data_mem(
     return train_x, dev_x, te_x, train_y, dev_y, te_y, train_m, dev_m, te_m, test_dt
 
 
-def load_agg_data_all(data_path='../data/aggregated_data_5min_scaled.csv', ncells=20, test_len=7):
+def load_agg_data_all(data_path='/home/yang/sources/ARMemNet-BigDL/data/aggregated_data_5min_scaled.csv', ncells=20, test_len=7):
 
     data = pd.read_csv(data_path, index_col=0)
     data.index = pd.to_datetime(data.index)
