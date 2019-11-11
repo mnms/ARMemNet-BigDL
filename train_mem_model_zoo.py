@@ -39,10 +39,3 @@ if __name__ == "__main__":
 
     optimizer.optimize(end_trigger=MaxEpoch(num_epochs))
 
-
-
-
-
-
-
-
