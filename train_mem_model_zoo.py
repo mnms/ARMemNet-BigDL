@@ -1,34 +1,25 @@
-import tensorflow as tf
-from tensorflow.contrib import layers
-import os
-from utils import make_date_dir, find_latest_dir
-
-import sys
-from zoo.pipeline.api.net import TFNet
-from zoo import init_nncontext, Sample
+from zoo import init_nncontext
 from zoo.tfpark import TFOptimizer, TFDataset
 from bigdl.optim.optimizer import *
-import tensorflow as tf
-import numpy as np
 from data_utils import load_agg_selected_data_mem
 from ARMem.config import Config
 from ARMem.model import Model
 
-# to reproduce the results in test_mem_model.py
-# please set PARALLELISM to 1 and BATCH_PER_THREAD to 1022
-PARALLELISM=4
-BATCH_PER_THREAD=3200
-
 
 if __name__ == "__main__":
-    config = Config()
 
+    data_path = sys.argv[1]
+    batch_size = int(sys.argv[2])
+    num_epochs = int(sys.argv[3])
+
+    config = Config()
+    config.data_path = data_path
     config.latest_model=False
 
     # init or get SparkContext
     sc = init_nncontext()
 
-    # create test data
+    # create train data
     train_x, dev_x, test_x, train_y, dev_y, test_y, train_m, dev_m, test_m, test_dt = \
         load_agg_selected_data_mem(data_path=config.data_path,
                                    x_len=config.x_len,
@@ -41,12 +32,12 @@ if __name__ == "__main__":
 
     model_dir = config.model_dir
 
-    dataset = TFDataset.from_ndarrays([train_x, train_m, train_y], batch_size=2700, val_tensors=[dev_x, dev_m, dev_y],)
+    dataset = TFDataset.from_ndarrays([train_x, train_m, train_y], batch_size=batch_size, val_tensors=[dev_x, dev_m, dev_y],)
 
     model = Model(config, dataset.tensors[0], dataset.tensors[1], dataset.tensors[2])
     optimizer = TFOptimizer.from_loss(model.loss, Adam(config.lr), metrics={"rse": model.rse, "smape": model.smape, "mae": model.mae})
 
-    optimizer.optimize(end_trigger=MaxEpoch(15000))
+    optimizer.optimize(end_trigger=MaxEpoch(num_epochs))
 
 
 
