@@ -16,7 +16,7 @@ def batch_loader(iterable, batch_size, shuffle=False):
      
 
 def load_agg_data(
-        data_path='/home/yang/sources/ARMemNet-BigDL/data/aggregated_5min_scaled.csv',
+        data_path='../data/aggregated_5min_scaled.csv',
         x_len=10,
         y_len=1,
         ncells=20,
@@ -125,7 +125,7 @@ def load_agg_data(
 
 
 def load_agg_selected_data_mem(
-        data_path='/home/jwang/git/ARMemNet-BigDL_jennie/data/aggregated_5min_scaled.csv',
+        data_path='../data/aggregated_5min_scaled.csv',
         x_len=10,
         y_len=1,
         mem_len=7,
