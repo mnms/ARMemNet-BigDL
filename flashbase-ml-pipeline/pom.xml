@@ -43,8 +43,8 @@
         </dependency>
         <dependency>
             <groupId>com.intel.analytics.zoo</groupId>
-            <artifactId>analytics-zoo-bigdl_0.8.0-spark_${spark.version}</artifactId>
-            <version>0.5.1</version>
+            <artifactId>analytics-zoo-bigdl_0.9.1-spark_${spark.version}</artifactId>
+            <version>0.6.0</version>
             <scope>provided</scope>
         </dependency>
 

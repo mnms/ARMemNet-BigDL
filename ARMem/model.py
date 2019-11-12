@@ -4,12 +4,15 @@ import os
 
 # AR_memory
 class Model(object):
-    def __init__(self, config):
+    def __init__(self, config, input_x=None, memories=None, targets=None):
         self.config = config
         self.global_step = tf.Variable(0, trainable=False, name="global_step")
         self.regularizer = layers.l2_regularizer(self.config.l2_lambda)
         self.sess = None
         self.saver = None
+        self.input_x = input_x
+        self.memories = memories
+        self.targets = targets
         self._build_model()
         
     def _build_model(self):
@@ -54,9 +57,12 @@ class Model(object):
         self.initialize_session()
 
     def add_placeholder(self):
-        self.input_x = tf.placeholder(shape=[None, self.config.nsteps, self.config.nfeatures],dtype=tf.float32, name="x")
-        self.targets = tf.placeholder(shape=[None, self.config.nfeatures], dtype=tf.float32, name="targets")
-        self.memories = tf.placeholder(shape=[None, (self.config.nsteps+1) * self.config.msteps, self.config.nfeatures], dtype=tf.float32,
+        if self.input_x is None:
+            self.input_x = tf.placeholder(shape=[None, self.config.nsteps, self.config.nfeatures],dtype=tf.float32, name="x")
+        if self.targets is None:
+            self.targets = tf.placeholder(shape=[None, self.config.nfeatures], dtype=tf.float32, name="targets")
+        if self.memories is None:
+            self.memories = tf.placeholder(shape=[None, (self.config.nsteps+1) * self.config.msteps, self.config.nfeatures], dtype=tf.float32,
                                        name="memories")
         # self.targets = tf.placeholder(shape=[None], dtype=tf.int32, name="targets")
         self.dropout = tf.placeholder(dtype=tf.float32, name="dropout")

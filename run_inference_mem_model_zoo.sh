@@ -5,4 +5,7 @@ if [ -z "${ANALYTICS_ZOO_HOME}" ]; then
 fi
 
 # bash $ANALYTICS_ZOO_HOME/bin/spark-submit-with-zoo.sh --master local[4] inference_mem_model_zoo.py
-bash $ANALYTICS_ZOO_HOME/bin/spark-submit-with-zoo.sh --master local[36] --driver-memory 32g inference_mem_model_zoo.py
+bash $ANALYTICS_ZOO_HOME/bin/spark-submit-python-with-zoo.sh \
+ --master local[36] \
+ --driver-memory 32g \
+ inference_mem_model_zoo.py
